@@ -18,6 +18,7 @@
 #include "Shader.h"
 #include "Buffers.h"
 #include "Timer.h"
+#include "World.h"
 
 class Application
 {
@@ -94,7 +95,7 @@ void Application::GLFWCreateWindow()
 	auto scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
 	auto w = static_cast<int>(960 * scale);
 	auto h = static_cast<int>(540 * scale);
-	m_Window = glfwCreateWindow(w, h, "Temperature Simulation", nullptr, nullptr);
+	m_Window = glfwCreateWindow(w, h, "temsi - 2D ideal gas simulation", nullptr, nullptr);
 	if (m_Window == nullptr)
 	{
 		throw std::runtime_error("GLFW: Window creation failed");
@@ -309,17 +310,16 @@ public:
 		std::random_device rd;
 		std::mt19937 gen(rd());
 		std::uniform_real_distribution<float> mass_dis(6.0e-26f, 7.0e-26f); // Mass of an Argon atom (~6.6e-26 kg)
-		std::uniform_real_distribution<float> pos_dis(-0.5f, 0.5f);
+		std::uniform_real_distribution<float> pos_x_dis(-World::kHalfExtent.x + World::kParticleRadius, World::kHalfExtent.x - World::kParticleRadius);
+		std::uniform_real_distribution<float> pos_y_dis(-World::kHalfExtent.y + World::kParticleRadius, World::kHalfExtent.y - World::kParticleRadius);
 		std::uniform_real_distribution<float> vel_dis(-400.0f, 400.0f); // m/s
 		std::uniform_real_distribution<float> color_dis(0.2f, 1.0f);
 
 		for (size_t i = 0; i < num_max_particles; ++i)
 		{
-			constexpr float r = 0.008f;
-
-			radii[i] = r;
+			radii[i] = World::kParticleRadius;
 			mass[i] = mass_dis(gen);
-			positions[i] = glm::vec2(pos_dis(gen), pos_dis(gen));
+			positions[i] = glm::vec2(pos_x_dis(gen), pos_y_dis(gen));
 			velocities[i] = glm::vec2(vel_dis(gen), vel_dis(gen));
 			colors[i] = glm::vec3(color_dis(gen), color_dis(gen), color_dis(gen));
 		}
@@ -396,12 +396,13 @@ void Application::Update()
 			return ShaderProgram(vertexShader, fragmentShader);
 		}();
 
-	GLint resolution_location = program.GetUniformLocation("u_resolution");
+	GLint half_extent_location = program.GetUniformLocation("u_half_extent");
+	GLint viewport_px_location = program.GetUniformLocation("u_viewport_px");
 
 	bool vsync_enabled = false;
 	glfwSwapInterval(vsync_enabled);
 
-	float time_scale = 1.0f;
+	float sim_ps_per_s = 10.0f;
 	float avg_kinetic_energy = 0.0f;
 	float total_kinetic_energy = 0.0f;
 	glm::vec2 total_momentum{ 0 };
@@ -420,10 +421,9 @@ void Application::Update()
 	{
 		timer.start_frame();
 
-		// Multiply by a small time scale (e.g. 2e-4) so molecules don't cross the box in 1 frame
-		constexpr float physical_time_scale = 2.0e-4f;
-
-		float dt = timer.dt() * time_scale * physical_time_scale;
+		// Clamp frame hitches (window drag, debugger) so particles can't tunnel through each other.
+		const float real_dt = std::min(timer.dt(), 1.0f / 30.0f);
+		const float dt = real_dt * sim_ps_per_s * World::kPicosecond; // simulated seconds this frame
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -451,7 +451,7 @@ void Application::Update()
 					glfwSwapInterval(vsync_enabled);
 				}
 
-				ImGui::SliderFloat("Time scale", &time_scale, 0.0f, 1.0f, "%.4fx");
+				ImGui::SliderFloat("Simulation speed", &sim_ps_per_s, 0.0f, 20.0f, "%.3f ps/s", ImGuiSliderFlags_Logarithmic);
 				ImGui::SliderInt("Active particles", &particles.num_active_particles, 0, particles.num_max_particles);
 			}
 
@@ -478,15 +478,14 @@ void Application::Update()
 		ebo.Bind();
 		program.Use();
 
-		glm::vec2 resolution(framebufferWidth, framebufferHeight);
-		glUniform2fv(resolution_location, 1, glm::value_ptr(resolution));
+		glUniform2fv(half_extent_location, 1, glm::value_ptr(World::kHalfExtent));
+		glUniform2f(viewport_px_location, static_cast<float>(framebufferWidth), static_cast<float>(framebufferHeight));
 
 		// ----------------------------------------------------------------------
 		pending_impulses.assign(particles.num_active_particles, glm::vec2(0.0f));
-		const float aspect_ratio = static_cast<float>(framebufferHeight) / static_cast<float>(framebufferWidth);
-		const glm::vec2 limit(1.0f / aspect_ratio, 1.0f);
+		const glm::vec2 limit = World::kHalfExtent;
 
-		constexpr float cell_size = 0.016f;
+		constexpr float cell_size = 2.0f * World::kParticleRadius;
 		const int cols = static_cast<int>(std::ceil(2.0f * limit.x / cell_size));
 		const int rows = static_cast<int>(std::ceil(2.0f * limit.y / cell_size));
 
