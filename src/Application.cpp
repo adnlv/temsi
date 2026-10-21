@@ -117,7 +117,6 @@ void Application::GLFWSetFramebufferSizeCallback()
 	glfwSetFramebufferSizeCallback(m_Window,
 		[](GLFWwindow* window, int width, int height)
 		{
-			glViewport(0, 0, width, height);
 			Log::Info("GL: Viewport resolution changed | Width: {} px, Height: {} px", width, height);
 		});
 }
@@ -154,11 +153,6 @@ void Application::GLADLoadGL()
 
 	glEnable(GL_BLEND);
 	glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
-
-	int frameBufferWidth;
-	int frameBufferHeight;
-	glfwGetFramebufferSize(m_Window, &frameBufferWidth, &frameBufferHeight);
-	glViewport(0, 0, frameBufferWidth, frameBufferHeight);
 }
 
 void Application::GLSetDebugOutputCallback()
@@ -347,6 +341,22 @@ private:
 	float m_kelvin{ 0.0f };
 };
 
+struct ViewportRect { int x, y, w, h; };
+
+// Largest rectangle with the box's aspect ratio that fits in the framebuffer, centered.
+static ViewportRect ComputeLetterbox(int fbw, int fbh) noexcept
+{
+	if (fbw <= 0 || fbh <= 0) return { 0, 0, 0, 0 }; // minimised
+	int w = fbw;
+	int h = static_cast<int>(fbw / World::kAspect);
+	if (h > fbh)
+	{
+		h = fbh;
+		w = static_cast<int>(fbh * World::kAspect);
+	}
+	return { (fbw - w) / 2, (fbh - h) / 2, w, h };
+}
+
 void Application::Update()
 {
 	ParticleBuffer particles;
@@ -478,12 +488,15 @@ void Application::Update()
 		glClearColor(0.0f, 0.0f, 0.0f, 1.0f);
 		glClear(GL_COLOR_BUFFER_BIT);
 
+		const ViewportRect vp = ComputeLetterbox(framebufferWidth, framebufferHeight);
+		glViewport(vp.x, vp.y, vp.w, vp.h);
+
 		vao.Bind();
 		ebo.Bind();
 		program.Use();
 
 		glUniform2fv(half_extent_location, 1, glm::value_ptr(World::kHalfExtent));
-		glUniform2f(viewport_px_location, static_cast<float>(framebufferWidth), static_cast<float>(framebufferHeight));
+		glUniform2f(viewport_px_location, static_cast<float>(vp.w), static_cast<float>(vp.h));
 
 		// ----------------------------------------------------------------------
 		pending_impulses.assign(particles.num_active_particles, glm::vec2(0.0f));
