@@ -8,10 +8,7 @@
 #include <sstream>
 #include <type_traits>
 #include <glad/gl.h>
-
-#ifndef DEV_ASSETS_DIR
-#define DEV_ASSETS_DIR "assets"
-#endif
+#include "Paths.h"
 
 enum class ShaderType
 {
@@ -113,7 +110,7 @@ inline std::string Shader::LoadFile(const std::filesystem::path& filepath)
 
 	try
 	{
-		file.open(std::filesystem::path(DEV_ASSETS_DIR) / filepath);
+		file.open(Paths::AssetsDir() / filepath);
 
 		std::stringstream source;
 		source << file.rdbuf();
@@ -122,7 +119,7 @@ inline std::string Shader::LoadFile(const std::filesystem::path& filepath)
 	}
 	catch (const std::ifstream::failure& e)
 	{
-		throw std::runtime_error("GL: Failed to load shader source from " + filepath.string() + ": " + e.what());
+		throw std::runtime_error("GL: Failed to load shader source from " + (Paths::AssetsDir() / filepath).string() + ": " + e.what());
 	}
 }
 
