@@ -403,6 +403,7 @@ void Application::Update()
 	glfwSwapInterval(vsync_enabled);
 
 	float sim_ps_per_s = 10.0f;
+	double sim_time_s = 0.0;
 	float avg_kinetic_energy = 0.0f;
 	float total_kinetic_energy = 0.0f;
 	glm::vec2 total_momentum{ 0 };
@@ -424,6 +425,7 @@ void Application::Update()
 		// Clamp frame hitches (window drag, debugger) so particles can't tunnel through each other.
 		const float real_dt = std::min(timer.dt(), 1.0f / 30.0f);
 		const float dt = real_dt * sim_ps_per_s * World::kPicosecond; // simulated seconds this frame
+		sim_time_s += dt;
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -459,6 +461,8 @@ void Application::Update()
 
 			if (ImGui::CollapsingHeader("Physical Properties", ImGuiTreeNodeFlags_DefaultOpen))
 			{
+				ImGui::Text("Box: %.1f x %.1f nm", World::kWidth * 1e9f, World::kHeight * 1e9f);
+				ImGui::Text("Simulated time: %.2f ns", sim_time_s * 1e9);
 				ImGui::Text("Temperature: %.2f (K), %.2f (C), %.2f (F)", temperature.kelvin(), temperature.celsius(), temperature.fahrenheit());
 				ImGui::Text("Average kinetic energy: %.4e (J/particle)", avg_kinetic_energy);
 				ImGui::Text("Total kinetic energy: %.4e (J)", total_kinetic_energy);
