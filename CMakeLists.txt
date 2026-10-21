@@ -40,6 +40,15 @@ add_library(imgui STATIC
 target_include_directories(imgui PUBLIC "${imgui_SOURCE_DIR}" "${imgui_SOURCE_DIR}/backends")
 target_link_libraries(imgui PUBLIC glfw glad_gl_core_46)
 
-add_executable(temsi "src/Application.cpp" "src/Log.h" "src/Shader.h" "src/Buffers.h" "src/Timer.h")
+add_executable(temsi "src/Application.cpp" "src/Log.h" "src/Shader.h" "src/Buffers.h" "src/Timer.h" "src/Paths.h")
 target_link_libraries(temsi PRIVATE glfw glad_gl_core_46 glm::glm spdlog::spdlog imgui)
-target_compile_definitions(temsi PRIVATE DEV_ASSETS_DIR="${CMAKE_SOURCE_DIR}/assets")
+
+# Assets live next to the executable so the binary is relocatable.
+add_custom_target(temsi_copy_assets ALL
+    COMMAND ${CMAKE_COMMAND} -E copy_directory_if_different
+            "${CMAKE_CURRENT_SOURCE_DIR}/assets" "$<TARGET_FILE_DIR:temsi>/assets"
+    COMMENT "Copying assets next to the executable")
+add_dependencies(temsi temsi_copy_assets)
+
+install(TARGETS temsi RUNTIME DESTINATION .)
+install(DIRECTORY assets DESTINATION .)
