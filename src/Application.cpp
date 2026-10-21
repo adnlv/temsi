@@ -395,7 +395,7 @@ void Application::Update()
 
 			ImGui::Separator();
 
-			if (ImGui::CollapsingHeader("Speed Distribution (Maxwell–Boltzmann)", ImGuiTreeNodeFlags_DefaultOpen))
+			if (ImGui::CollapsingHeader("Speed Distribution (Maxwell-Boltzmann)", ImGuiTreeNodeFlags_DefaultOpen))
 			{
 				const auto& dist = simulation.GetSpeedDistribution();
 				const float plot_max = dist.max_pdf_value > 0.0f ? dist.max_pdf_value * 1.15f : 0.005f;

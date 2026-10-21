@@ -18,6 +18,7 @@ Real-time 2D ideal gas simulation in C++17 and OpenGL 4.6: watch macroscopic tem
 - **Order-Independent Collision Resolution:** Uses an impulse-based Jacobi-style solver that computes and accumulates simultaneous collision impulses before applying them, removing sequential resolution bias.
 - **Instanced GPU Rendering:** Renders thousands of particles in a single OpenGL draw call (`glDrawElementsInstanced`), uploading only dynamic positions per frame while keeping static attributes in immutable VBOs. Antialiased circular particles are shaped smoothly in the fragment shader.
 - **Letterboxed Aspect-Ratio Preservation:** Automatically letterboxes/pillarboxes the viewport to keep the fixed 16:9 physical box geometry undistorted regardless of window resizing or display aspect ratios.
+- **Maxwell–Boltzmann Speed Distribution Verification:** Real-time speed distribution histogram comparing active particle velocities against the theoretical 2D Maxwell–Boltzmann (Rayleigh) distribution curve, validating thermodynamic relaxation into equilibrium.
 - **Interactive UI & Metrics:** Integrated Dear ImGui control panel providing controls for simulation speed, active particle count, VSync, and live metrics for temperature ($K$, $^\circ C$, $^\circ F$), kinetic energy, and momentum.
 
 ---
@@ -64,7 +65,10 @@ temsi/
 │       ├── circle.vert        # Instanced vertex shader mapping SI metres to clip space
 │       └── circle.frag        # Antialiased radial circle disc rendering
 ├── src/
-│   ├── Application.cpp        # Application lifecycle, simulation loop, ImGui UI
+│   ├── Application.h          # Application window, OpenGL lifecycle, and UI layout
+│   ├── Application.cpp        # Application event loop, render dispatch, and main()
+│   ├── Simulation.h           # Physics simulation, ParticleBuffer, and SpeedDistribution
+│   ├── Simulation.cpp         # Spatial grid collision solver, integration, and PDF math
 │   ├── World.h                # Physical constants, dimensions, and simulation scale
 │   ├── Paths.h                # Relocatable asset directory resolution
 │   ├── Shader.h               # RAII OpenGL shader and program abstractions
