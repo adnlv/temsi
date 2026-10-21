@@ -41,7 +41,7 @@ $$\mathbf{v}_1' = \mathbf{v}_1 - \frac{2 m_2}{m_1 + m_2} \frac{(\mathbf{v}_1 - \
 
 $$\mathbf{v}_2' = \mathbf{v}_2 + \frac{2 m_1}{m_1 + m_2} \frac{(\mathbf{v}_1 - \mathbf{v}_2) \cdot (\mathbf{x}_1 - \mathbf{x}_2)}{\lVert \mathbf{x}_1 - \mathbf{x}_2 \rVert^2} (\mathbf{x}_1 - \mathbf{x}_2)$$
 
-Wall boundaries are perfectly specular and elastic: when a particle hits a boundary at $\pm \text{half\_extent}$, its normal velocity component is reflected ($v_n \gets -v_n$) and position is clamped to prevent boundary penetration.
+Wall boundaries are perfectly specular and elastic: when a particle hits a boundary at $\pm \mathbf{L}_{\text{half}}$ (`half_extent`), its normal velocity component is reflected ($v_n \gets -v_n$) and position is clamped to prevent boundary penetration.
 
 ### 3. Physical Units & Scales
 
@@ -135,15 +135,11 @@ cmake --build out/build/x64-release
 
 ---
 
-## Known Limitations & Roadmap
+## Known Limitations
 
 - **Enlarged Particle Radii:** Particles are drawn with effective collision radius $r = 0.4\ \text{nm}$ (Argon van der Waals radius is $\approx 0.188\ \text{nm}$) to allow visual clarity in the UI viewport.
 - **Hard-Sphere Potential:** Molecules behave as ideal hard elastic spheres without long-range Lennard-Jones potential forces (attractive dispersion or Pauli repulsion).
 - **Tunneling at Extreme Speeds:** Highly accelerated particles under high time multipliers may travel more than one diameter per time step without continuous collision detection (CCD).
-- **Roadmap:**
-  - [ ] Real-time Maxwell–Boltzmann speed distribution histogram comparison.
-  - [ ] Temperature control thermostats (Berendsen / Nosé–Hoover) and movable piston boundary for pressure experiments.
-  - [ ] Automated continuous integration (CI) workflows for Linux and Windows builds.
 
 ---
 
