@@ -40,7 +40,18 @@ add_library(imgui STATIC
 target_include_directories(imgui PUBLIC "${imgui_SOURCE_DIR}" "${imgui_SOURCE_DIR}/backends")
 target_link_libraries(imgui PUBLIC glfw glad_gl_core_46)
 
-add_executable(temsi "src/Application.cpp" "src/Log.h" "src/Shader.h" "src/Buffers.h" "src/Timer.h" "src/Paths.h" "src/World.h")
+add_executable(temsi
+    "src/Application.h"
+    "src/Application.cpp"
+    "src/Simulation.h"
+    "src/Simulation.cpp"
+    "src/Log.h"
+    "src/Shader.h"
+    "src/Buffers.h"
+    "src/Timer.h"
+    "src/Paths.h"
+    "src/World.h"
+)
 target_link_libraries(temsi PRIVATE glfw glad_gl_core_46 glm::glm spdlog::spdlog imgui)
 
 # Assets live next to the executable so the binary is relocatable.

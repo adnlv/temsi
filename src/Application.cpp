@@ -1,13 +1,12 @@
+#include "Application.h"
+
 #include <iostream>
 #include <exception>
 #include <string>
 #include <string_view>
 #include <vector>
-#include <random>
 #include <cmath>
 #include <algorithm>
-#include <glad/gl.h>
-#include <GLFW/glfw3.h>
 #include <glm/glm.hpp>
 #include <glm/gtc/type_ptr.hpp>
 #include <imgui.h>
@@ -19,32 +18,7 @@
 #include "Buffers.h"
 #include "Timer.h"
 #include "World.h"
-
-class Application
-{
-public:
-	Application();
-	~Application() noexcept;
-
-private:
-	GLFWwindow* m_Window;
-
-	void GLFWInit();
-	void GLFWTerminate() noexcept;
-	void GLFWCreateWindow();
-	void GLFWDestroyWindow() noexcept;
-	void GLFWSetFramebufferSizeCallback();
-	void GLFWSetKeyCallback();
-
-	void GLADLoadGL();
-
-	void GLSetDebugOutputCallback();
-
-	void imgui_init() noexcept;
-	void imgui_shutdown() noexcept;
-
-	void Update();
-};
+#include "Simulation.h"
 
 Application::Application()
 {
@@ -147,7 +121,7 @@ void Application::GLADLoadGL()
 {
 	if (!gladLoadGL(glfwGetProcAddress))
 	{
-		throw std::runtime_error("GLAD: GL loading failed");
+		throw std::runtime_error("GLAD: GL loaded failed");
 	}
 	Log::Info("GLAD: GL loaded");
 
@@ -281,66 +255,6 @@ void Application::imgui_shutdown() noexcept
 	ImGui::DestroyContext();
 }
 
-class ParticleBuffer
-{
-public:
-	std::vector<float> mass;
-	std::vector<float> radii;
-	std::vector<glm::vec2> positions;
-	std::vector<glm::vec2> velocities;
-	std::vector<glm::vec3> colors;
-
-	int num_max_particles;
-	int num_active_particles;
-
-	ParticleBuffer() : num_max_particles(2000), num_active_particles(num_max_particles / 2)
-	{
-		mass.resize(num_max_particles);
-		radii.resize(num_max_particles);
-		positions.resize(num_max_particles);
-		velocities.resize(num_max_particles);
-		colors.resize(num_max_particles);
-
-		std::random_device rd;
-		std::mt19937 gen(rd());
-		std::uniform_real_distribution<float> mass_dis(6.0e-26f, 7.0e-26f); // Mass of an Argon atom (~6.6e-26 kg)
-		std::uniform_real_distribution<float> pos_x_dis(-World::kHalfExtent.x + World::kParticleRadius, World::kHalfExtent.x - World::kParticleRadius);
-		std::uniform_real_distribution<float> pos_y_dis(-World::kHalfExtent.y + World::kParticleRadius, World::kHalfExtent.y - World::kParticleRadius);
-		std::uniform_real_distribution<float> vel_dis(-400.0f, 400.0f); // m/s
-		std::uniform_real_distribution<float> color_dis(0.2f, 1.0f);
-
-		for (size_t i = 0; i < num_max_particles; ++i)
-		{
-			radii[i] = World::kParticleRadius;
-			mass[i] = mass_dis(gen);
-			positions[i] = glm::vec2(pos_x_dis(gen), pos_y_dis(gen));
-			velocities[i] = glm::vec2(vel_dis(gen), vel_dis(gen));
-			colors[i] = glm::vec3(color_dis(gen), color_dis(gen), color_dis(gen));
-		}
-	}
-	~ParticleBuffer() = default;
-};
-
-class Temperature
-{
-public:
-	[[nodiscard]] float kelvin() const noexcept { return m_kelvin; }
-	[[nodiscard]] float celsius() const noexcept { return m_kelvin + k_C_ABS_ZERO; }
-	[[nodiscard]] float fahrenheit() const noexcept { return m_kelvin * k_K_TO_F_RATIO + k_F_ABS_ZERO; }
-
-	void update_from_kinetic_energy(float energy) noexcept { m_kelvin = energy / k_B; }
-
-private:
-	// Boltzmann constant
-	static constexpr float k_B{ 1.380649e-23f };
-
-	static constexpr float k_C_ABS_ZERO{ -273.15f };
-	static constexpr float k_F_ABS_ZERO{ -459.67f };
-	static constexpr float k_K_TO_F_RATIO{ 1.8f };
-
-	float m_kelvin{ 0.0f };
-};
-
 struct ViewportRect { int x, y, w, h; };
 
 // Largest rectangle with the box's aspect ratio that fits in the framebuffer, centered.
@@ -359,7 +273,7 @@ static ViewportRect ComputeLetterbox(int fbw, int fbh) noexcept
 
 void Application::Update()
 {
-	ParticleBuffer particles;
+	Simulation simulation;
 
 	std::vector<float> vertices{
 		1.0f,  1.0f, 0.0f,
@@ -377,6 +291,8 @@ void Application::Update()
 	Buffer vbo(BufferType::ArrayBuffer, vertices.size() * sizeof(vertices.at(0)), vertices.data(), BufferUsage::StaticDraw);
 	vao.SetAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(vertices.at(0)), nullptr);
 	vao.EnableAttribArray(2);
+
+	const auto& particles = simulation.Particles();
 
 	Buffer radius_vbo(BufferType::ArrayBuffer, particles.num_max_particles * sizeof(particles.radii.at(0)), particles.radii.data(), BufferUsage::StaticDraw);
 	vao.SetAttribPointer(0, 1, GL_FLOAT, GL_FALSE, sizeof(particles.radii.at(0)), nullptr);
@@ -414,18 +330,6 @@ void Application::Update()
 
 	float sim_ps_per_s = 10.0f;
 	double sim_time_s = 0.0;
-	float avg_kinetic_energy = 0.0f;
-	float total_kinetic_energy = 0.0f;
-	glm::vec2 total_momentum{ 0 };
-
-	std::vector<glm::vec2> pending_impulses;
-	pending_impulses.reserve(particles.num_max_particles);
-
-	std::vector<int> cell_head;
-	std::vector<int> particle_next;
-	particle_next.resize(particles.num_max_particles);
-
-	Temperature temperature;
 
 	Timer timer;
 	while (!glfwWindowShouldClose(m_Window))
@@ -436,6 +340,8 @@ void Application::Update()
 		const float real_dt = std::min(timer.dt(), 1.0f / 30.0f);
 		const float dt = real_dt * sim_ps_per_s * World::kPicosecond; // simulated seconds this frame
 		sim_time_s += dt;
+
+		simulation.Update(dt);
 
 		ImGui_ImplOpenGL3_NewFrame();
 		ImGui_ImplGlfw_NewFrame();
@@ -464,19 +370,27 @@ void Application::Update()
 				}
 
 				ImGui::SliderFloat("Simulation speed", &sim_ps_per_s, 0.0f, 20.0f, "%.3f ps/s", ImGuiSliderFlags_Logarithmic);
-				ImGui::SliderInt("Active particles", &particles.num_active_particles, 0, particles.num_max_particles);
+				
+				int active = simulation.ActiveParticles();
+				if (ImGui::SliderInt("Active particles", &active, 0, simulation.MaxParticles()))
+				{
+					simulation.SetActiveParticles(active);
+				}
 			}
 
 			ImGui::Separator();
 
 			if (ImGui::CollapsingHeader("Physical Properties", ImGuiTreeNodeFlags_DefaultOpen))
 			{
+				const auto& temp = simulation.GetTemperature();
+				const auto momentum = simulation.TotalMomentum();
+
 				ImGui::Text("Box: %.1f x %.1f nm", World::kWidth * 1e9f, World::kHeight * 1e9f);
 				ImGui::Text("Simulated time: %.2f ns", sim_time_s * 1e9);
-				ImGui::Text("Temperature: %.2f (K), %.2f (C), %.2f (F)", temperature.kelvin(), temperature.celsius(), temperature.fahrenheit());
-				ImGui::Text("Average kinetic energy: %.4e (J/particle)", avg_kinetic_energy);
-				ImGui::Text("Total kinetic energy: %.4e (J)", total_kinetic_energy);
-				ImGui::Text("Total momentum: (x: %.4e; y: %.4e) (kg * m/s)", total_momentum.x, total_momentum.y);
+				ImGui::Text("Temperature: %.2f (K), %.2f (C), %.2f (F)", temp.kelvin(), temp.celsius(), temp.fahrenheit());
+				ImGui::Text("Average kinetic energy: %.4e (J/particle)", simulation.AvgKineticEnergy());
+				ImGui::Text("Total kinetic energy: %.4e (J)", simulation.TotalKineticEnergy());
+				ImGui::Text("Total momentum: (x: %.4e; y: %.4e) (kg * m/s)", momentum.x, momentum.y);
 			}
 
 			ImGui::End();
@@ -498,158 +412,8 @@ void Application::Update()
 		glUniform2fv(half_extent_location, 1, glm::value_ptr(World::kHalfExtent));
 		glUniform2f(viewport_px_location, static_cast<float>(vp.w), static_cast<float>(vp.h));
 
-		// ----------------------------------------------------------------------
-		pending_impulses.assign(particles.num_active_particles, glm::vec2(0.0f));
-		const glm::vec2 limit = World::kHalfExtent;
-
-		constexpr float cell_size = 2.0f * World::kParticleRadius;
-		const int cols = static_cast<int>(std::ceil(2.0f * limit.x / cell_size));
-		const int rows = static_cast<int>(std::ceil(2.0f * limit.y / cell_size));
-
-		// Reset grid heads (zero heap allocations if cols*rows <= capacity)
-		cell_head.assign(static_cast<std::vector<int, std::allocator<int>>::size_type>(cols) * rows, -1);
-
-		// 2. Populate the linked cell list O(N)
-		for (size_t i = 0; i < particles.num_active_particles; ++i)
-		{
-			const auto& p{ particles.positions[i] };
-			int gx = std::clamp(static_cast<int>((p.x + limit.x) / cell_size), 0, cols - 1);
-			int gy = std::clamp(static_cast<int>((p.y + limit.y) / cell_size), 0, rows - 1);
-			int cell_idx = gy * cols + gx;
-			particle_next[i] = cell_head[cell_idx];
-			cell_head[cell_idx] = static_cast<int>(i);
-		}
-
-		// Helper lambda to check and resolve collision between particles i and j
-		auto check_collision = [&](size_t i, size_t j)
-			{
-				const auto& p1{ particles.positions[i] };
-				const auto& v1{ particles.velocities[i] };
-				const auto& r1{ particles.radii[i] };
-				const auto& m1{ particles.mass[i] };
-
-				const auto& p2{ particles.positions[j] };
-				const auto& v2{ particles.velocities[j] };
-				const auto& r2{ particles.radii[j] };
-				const auto& m2{ particles.mass[j] };
-
-				const auto pos_diff = p1 - p2;
-				const auto min_dist = r1 + r2;
-				const auto min_dist_sq = min_dist * min_dist;
-				const auto dist_sq = glm::dot(pos_diff, pos_diff);
-				if (dist_sq > min_dist_sq || dist_sq == 0.0f)
-					return;
-
-				const auto vel_diff = v1 - v2;
-				const auto dot_prod = glm::dot(vel_diff, pos_diff);
-				if (dot_prod >= 0.0f)
-					return;
-
-				const auto total_mass = m1 + m2;
-				const auto impulse_scalar = dot_prod / dist_sq;
-				const glm::vec2 impulse = impulse_scalar * pos_diff;
-
-				pending_impulses[i] -= (2.0f * m2 / total_mass) * impulse;
-				pending_impulses[j] += (2.0f * m1 / total_mass) * impulse;
-			};
-
-		// 3. Traverse grid cells and check collisions O(N)
-		for (int gy = 0; gy < rows; ++gy)
-		{
-			for (int gx = 0; gx < cols; ++gx)
-			{
-				int cell_idx = gy * cols + gx;
-				int i = cell_head[cell_idx];
-				while (i != -1)
-				{
-					// Check against subsequent particles in the same cell
-					int j = particle_next[i];
-					while (j != -1)
-					{
-						check_collision(i, j);
-						j = particle_next[j];
-					}
-
-					// Check against particles in the 4 forward neighboring cells (half-shell)
-					constexpr int neighbor_offsets[4][2] = {
-						{ 1,  0}, // Right
-						{-1,  1}, // Bottom-Left
-						{ 0,  1}, // Bottom
-						{ 1,  1}  // Bottom-Right
-					};
-
-					for (const auto& offset : neighbor_offsets)
-					{
-						int nx = gx + offset[0];
-						int ny = gy + offset[1];
-						if (nx >= 0 && nx < cols && ny >= 0 && ny < rows)
-						{
-							int neighbor_cell_idx = ny * cols + nx;
-							int nj = cell_head[neighbor_cell_idx];
-							while (nj != -1)
-							{
-								check_collision(i, nj);
-								nj = particle_next[nj];
-							}
-						}
-					}
-
-					i = particle_next[i];
-				}
-			}
-		}
-
-		glm::vec2 current_total_momentum{ 0 };
-		float current_total_kinetic_energy = 0.0f;
-
-		for (size_t i = 0; i < particles.num_active_particles; ++i)
-		{
-			auto& p1{ particles.positions[i] };
-			auto& v1{ particles.velocities[i] };
-			auto& r1{ particles.radii[i] };
-			auto& m1{ particles.mass[i] };
-
-			v1 += pending_impulses[i];
-			p1 += v1 * dt;
-
-			if (p1.x - r1 < -limit.x)
-			{
-				p1.x = -limit.x + r1;
-				v1.x *= -1.0f;
-			}
-			else if (p1.x + r1 > limit.x)
-			{
-				p1.x = limit.x - r1;
-				v1.x *= -1.0f;
-			}
-
-			if (p1.y - r1 < -limit.y)
-			{
-				p1.y = -limit.y + r1;
-				v1.y *= -1.0f;
-			}
-			else if (p1.y + r1 > limit.y)
-			{
-				p1.y = limit.y - r1;
-				v1.y *= -1.0f;
-			}
-
-			const float velocity_sq = glm::dot(v1, v1);
-			current_total_kinetic_energy += m1 * velocity_sq / 2.0f;
-			current_total_momentum += v1 * m1;
-		}
-
-		total_kinetic_energy = current_total_kinetic_energy;
-		avg_kinetic_energy = particles.num_active_particles != 0
-			? total_kinetic_energy / particles.num_active_particles
-			: 0.0f;
-		total_momentum = current_total_momentum;
-
-		temperature.update_from_kinetic_energy(avg_kinetic_energy);
-		// --------------------------------------------------------
-
-		center_vbo.SubData(0, particles.num_active_particles * sizeof(particles.positions.at(0)), particles.positions.data());
-		glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, particles.num_active_particles);
+		center_vbo.SubData(0, simulation.ActiveParticles() * sizeof(particles.positions.at(0)), particles.positions.data());
+		glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, simulation.ActiveParticles());
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
