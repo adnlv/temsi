@@ -191,4 +191,73 @@ void Simulation::Update(float dt)
 	m_total_momentum = current_total_momentum;
 
 	m_temperature.update_from_kinetic_energy(m_avg_kinetic_energy);
+
+	ComputeSpeedDistribution();
+}
+
+void Simulation::ComputeSpeedDistribution()
+{
+	const size_t active_count = static_cast<size_t>(m_particles.num_active_particles);
+	m_speed_dist.empirical_pdf.fill(0.0f);
+	m_speed_dist.theoretical_pdf.fill(0.0f);
+	m_speed_dist.max_pdf_value = 0.0f;
+
+	if (active_count == 0)
+	{
+		return;
+	}
+
+	constexpr float bin_width = SpeedDistribution::kBinWidth;
+	constexpr int num_bins = SpeedDistribution::kNumBins;
+
+	// 1. Accumulate empirical histogram counts
+	std::array<int, num_bins> bin_counts{};
+	float total_mass = 0.0f;
+
+	for (size_t i = 0; i < active_count; ++i)
+	{
+		const float speed = glm::length(m_particles.velocities[i]);
+		int bin = static_cast<int>(speed / bin_width);
+		if (bin >= 0 && bin < num_bins)
+		{
+			bin_counts[bin]++;
+		}
+		total_mass += m_particles.mass[i];
+	}
+
+	const float avg_mass = total_mass / static_cast<float>(active_count);
+	const float T = m_temperature.kelvin();
+	const float kB = Temperature::BoltzmannConstant();
+
+	// 2. Normalize empirical PDF and calculate theoretical 2D Rayleigh PDF
+	// 2D Maxwell-Boltzmann: f(v) = (m*v / (kB*T)) * exp(-m*v^2 / (2*kB*T))
+	const float inv_active_particles = 1.0f / static_cast<float>(active_count);
+	const bool valid_temp = (T > 0.0f && avg_mass > 0.0f);
+
+	if (valid_temp)
+	{
+		m_speed_dist.peak_speed_theoretical = std::sqrt(kB * T / avg_mass);
+		m_speed_dist.mean_speed_theoretical = std::sqrt(3.1415926535f * kB * T / (2.0f * avg_mass));
+		m_speed_dist.rms_speed_theoretical = std::sqrt(2.0f * kB * T / avg_mass);
+	}
+
+	float max_val = 0.0f;
+	for (int b = 0; b < num_bins; ++b)
+	{
+		// Empirical probability density = fraction of particles in bin / bin_width
+		const float empirical_density = (static_cast<float>(bin_counts[b]) * inv_active_particles) / bin_width;
+		m_speed_dist.empirical_pdf[b] = empirical_density;
+		max_val = std::max(max_val, empirical_density);
+
+		if (valid_temp)
+		{
+			const float v = (static_cast<float>(b) + 0.5f) * bin_width;
+			const float exponent = -(avg_mass * v * v) / (2.0f * kB * T);
+			const float theoretical_density = ((avg_mass * v) / (kB * T)) * std::exp(exponent);
+			m_speed_dist.theoretical_pdf[b] = theoretical_density;
+			max_val = std::max(max_val, theoretical_density);
+		}
+	}
+
+	m_speed_dist.max_pdf_value = max_val;
 }

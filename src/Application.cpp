@@ -393,6 +393,31 @@ void Application::Update()
 				ImGui::Text("Total momentum: (x: %.4e; y: %.4e) (kg * m/s)", momentum.x, momentum.y);
 			}
 
+			ImGui::Separator();
+
+			if (ImGui::CollapsingHeader("Speed Distribution (Maxwell–Boltzmann)", ImGuiTreeNodeFlags_DefaultOpen))
+			{
+				const auto& dist = simulation.GetSpeedDistribution();
+				const float plot_max = dist.max_pdf_value > 0.0f ? dist.max_pdf_value * 1.15f : 0.005f;
+
+				ImGui::Text("Empirical speed probability density (PDF):");
+				ImGui::PlotHistogram("##empirical_pdf", dist.empirical_pdf.data(), SpeedDistribution::kNumBins,
+					0, nullptr, 0.0f, plot_max, ImVec2(0, 90.0f));
+
+				ImGui::Text("Theoretical 2D Rayleigh distribution:");
+				ImGui::PlotLines("##theory_pdf", dist.theoretical_pdf.data(), SpeedDistribution::kNumBins,
+					0, nullptr, 0.0f, plot_max, ImVec2(0, 70.0f));
+
+				ImGui::TextDisabled("Domain: 0 to %.0f m/s (bin width: %.1f m/s)",
+					SpeedDistribution::kMaxSpeed, SpeedDistribution::kBinWidth);
+
+				ImGui::Spacing();
+				ImGui::Text("Characteristic speeds (theoretical):");
+				ImGui::BulletText("Most probable speed (v_p): %.1f m/s", dist.peak_speed_theoretical);
+				ImGui::BulletText("Mean speed (<v>):           %.1f m/s", dist.mean_speed_theoretical);
+				ImGui::BulletText("Root-mean-square (v_rms):    %.1f m/s", dist.rms_speed_theoretical);
+			}
+
 			ImGui::End();
 		}
 

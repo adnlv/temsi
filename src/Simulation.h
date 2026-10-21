@@ -1,5 +1,6 @@
 #pragma once
 #include <vector>
+#include <array>
 #include <glm/glm.hpp>
 #include "World.h"
 
@@ -40,6 +41,20 @@ struct ParticleBuffer
 	~ParticleBuffer() = default;
 };
 
+struct SpeedDistribution
+{
+	static constexpr int kNumBins = 30;
+	static constexpr float kMaxSpeed = 1200.0f; // m/s
+	static constexpr float kBinWidth = kMaxSpeed / static_cast<float>(kNumBins); // 40 m/s
+
+	std::array<float, kNumBins> empirical_pdf{};
+	std::array<float, kNumBins> theoretical_pdf{};
+	float max_pdf_value{ 0.0f };
+	float peak_speed_theoretical{ 0.0f };
+	float mean_speed_theoretical{ 0.0f };
+	float rms_speed_theoretical{ 0.0f };
+};
+
 class Simulation
 {
 public:
@@ -60,9 +75,12 @@ public:
 	[[nodiscard]] int ActiveParticles() const noexcept { return m_particles.num_active_particles; }
 	void SetActiveParticles(int count) noexcept;
 
+	[[nodiscard]] const SpeedDistribution& GetSpeedDistribution() const noexcept { return m_speed_dist; }
+
 private:
 	ParticleBuffer m_particles;
 	Temperature m_temperature;
+	SpeedDistribution m_speed_dist;
 
 	float m_avg_kinetic_energy{ 0.0f };
 	float m_total_kinetic_energy{ 0.0f };
@@ -71,4 +89,6 @@ private:
 	std::vector<glm::vec2> m_pending_impulses;
 	std::vector<int> m_cell_head;
 	std::vector<int> m_particle_next;
+
+	void ComputeSpeedDistribution();
 };
