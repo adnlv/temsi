@@ -9,13 +9,6 @@ Real-time 2D ideal gas simulation in C++17 and OpenGL 4.6: watch macroscopic tem
 
 ![Demo](docs/demo.gif)
 
-<details>
-<summary>Static Screenshot</summary>
-
-<img width="1920" height="1041" alt="temsi screenshot" src="https://github.com/user-attachments/assets/6617d822-18d7-4ce5-8cba-933f7706d0a2" />
-
-</details>
-
 ---
 
 ## Features
