@@ -8,8 +8,16 @@ public:
 	Application();
 	~Application() noexcept;
 
+	Application(const Application&) = delete;
+	Application& operator=(const Application&) = delete;
+	Application(Application&&) = delete;
+	Application& operator=(Application&&) = delete;
+
+	void Run();
+
 private:
 	GLFWwindow* m_Window{ nullptr };
+	bool m_ImGuiInitialized{ false };
 
 	void GLFWInit();
 	void GLFWTerminate() noexcept;
@@ -23,6 +31,4 @@ private:
 
 	void imgui_init() noexcept;
 	void imgui_shutdown() noexcept;
-
-	void Update();
 };

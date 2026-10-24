@@ -20,26 +20,57 @@
 #include "World.h"
 #include "Simulation.h"
 
+static float GetMonitorContentScale()
+{
+	GLFWmonitor* monitor = glfwGetPrimaryMonitor();
+	if (monitor == nullptr)
+	{
+		return 1.0f;
+	}
+	float scale = ImGui_ImplGlfw_GetContentScaleForMonitor(monitor);
+	return scale > 0.0f ? scale : 1.0f;
+}
+
 Application::Application()
 {
 	GLFWInit();
-	GLFWCreateWindow();
+	try
+	{
+		GLFWCreateWindow();
 
-	GLADLoadGL();
+		GLADLoadGL();
 
-	GLFWSetFramebufferSizeCallback();
-	GLFWSetKeyCallback();
+		GLFWSetFramebufferSizeCallback();
+		GLFWSetKeyCallback();
 
-	GLSetDebugOutputCallback();
-	imgui_init();
-
-	Update();
+		GLSetDebugOutputCallback();
+		imgui_init();
+	}
+	catch (...)
+	{
+		if (m_ImGuiInitialized)
+		{
+			imgui_shutdown();
+		}
+		if (m_Window != nullptr)
+		{
+			GLFWDestroyWindow();
+		}
+		GLFWTerminate();
+		throw;
+	}
 }
 
 Application::~Application()
 {
-	imgui_shutdown();
-	GLFWDestroyWindow();
+	if (m_ImGuiInitialized)
+	{
+		imgui_shutdown();
+	}
+	if (m_Window != nullptr)
+	{
+		GLFWDestroyWindow();
+	}
 	GLFWTerminate();
 }
 
@@ -55,7 +86,9 @@ void Application::GLFWInit()
 	glfwWindowHint(GLFW_CONTEXT_VERSION_MINOR, 6);
 	glfwWindowHint(GLFW_OPENGL_PROFILE, GLFW_OPENGL_CORE_PROFILE);
 	glfwWindowHint(GLFW_OPENGL_FORWARD_COMPAT, GL_TRUE);
+#ifndef NDEBUG
 	glfwWindowHint(GLFW_OPENGL_DEBUG_CONTEXT, GL_TRUE);
+#endif
 }
 
 void Application::GLFWTerminate() noexcept
@@ -66,7 +99,7 @@ void Application::GLFWTerminate() noexcept
 
 void Application::GLFWCreateWindow()
 {
-	auto scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
+	auto scale = GetMonitorContentScale();
 	auto w = static_cast<int>(960 * scale);
 	auto h = static_cast<int>(540 * scale);
 	m_Window = glfwCreateWindow(w, h, "temsi - 2D ideal gas simulation", nullptr, nullptr);
@@ -89,7 +122,7 @@ void Application::GLFWDestroyWindow() noexcept
 void Application::GLFWSetFramebufferSizeCallback()
 {
 	glfwSetFramebufferSizeCallback(m_Window,
-		[](GLFWwindow* window, int width, int height)
+		[]([[maybe_unused]] GLFWwindow* window, int width, int height)
 		{
 			Log::Info("GL: Viewport resolution changed | Width: {} px, Height: {} px", width, height);
 		});
@@ -131,13 +164,14 @@ void Application::GLADLoadGL()
 
 void Application::GLSetDebugOutputCallback()
 {
+#ifndef NDEBUG
 	int flags = 0;
 	glGetIntegerv(GL_CONTEXT_FLAGS, &flags);
 	if (flags & GL_CONTEXT_FLAG_DEBUG_BIT) {
 		glEnable(GL_DEBUG_OUTPUT);
 		glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
 		glDebugMessageCallback(
-			[](GLenum source, GLenum type, GLuint id, GLenum severity, GLsizei length, const GLchar* message, const void* userParam)
+			[](GLenum source, GLenum type, GLuint id, GLenum severity, [[maybe_unused]] GLsizei length, const GLchar* message, [[maybe_unused]] const void* userParam)
 			{
 				std::string source_str;
 				switch (source) {
@@ -227,7 +261,9 @@ void Application::GLSetDebugOutputCallback()
 				Log::Message(level, "GL: {} severity {} message from {} ({}): {}", severity_str, type_str, source_str, id, message);
 			}, nullptr);
 		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+		glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DEBUG_SEVERITY_NOTIFICATION, 0, nullptr, GL_FALSE);
 	}
+#endif
 }
 
 void Application::imgui_init() noexcept
@@ -239,20 +275,25 @@ void Application::imgui_init() noexcept
 
 	ImGui::StyleColorsDark();
 
-	float scale = ImGui_ImplGlfw_GetContentScaleForMonitor(glfwGetPrimaryMonitor());
+	float scale = GetMonitorContentScale();
 	ImGuiStyle& style = ImGui::GetStyle();
 	style.ScaleAllSizes(scale);
 	style.FontScaleDpi = scale;
 
 	ImGui_ImplGlfw_InitForOpenGL(m_Window, true);
 	ImGui_ImplOpenGL3_Init("#version 460");
+	m_ImGuiInitialized = true;
 }
 
 void Application::imgui_shutdown() noexcept
 {
-	ImGui_ImplOpenGL3_Shutdown();
-	ImGui_ImplGlfw_Shutdown();
-	ImGui::DestroyContext();
+	if (m_ImGuiInitialized)
+	{
+		ImGui_ImplOpenGL3_Shutdown();
+		ImGui_ImplGlfw_Shutdown();
+		ImGui::DestroyContext();
+		m_ImGuiInitialized = false;
+	}
 }
 
 struct ViewportRect { int x, y, w, h; };
@@ -262,16 +303,16 @@ static ViewportRect ComputeLetterbox(int fbw, int fbh) noexcept
 {
 	if (fbw <= 0 || fbh <= 0) return { 0, 0, 0, 0 }; // minimised
 	int w = fbw;
-	int h = static_cast<int>(fbw / World::kAspect);
+	int h = std::max(1, static_cast<int>(static_cast<float>(fbw) / World::kAspect));
 	if (h > fbh)
 	{
 		h = fbh;
-		w = static_cast<int>(fbh * World::kAspect);
+		w = std::max(1, static_cast<int>(static_cast<float>(fbh) * World::kAspect));
 	}
 	return { (fbw - w) / 2, (fbh - h) / 2, w, h };
 }
 
-void Application::Update()
+void Application::Run()
 {
 	Simulation simulation;
 
@@ -429,16 +470,19 @@ void Application::Update()
 		glClear(GL_COLOR_BUFFER_BIT);
 
 		const ViewportRect vp = ComputeLetterbox(framebufferWidth, framebufferHeight);
-		glViewport(vp.x, vp.y, vp.w, vp.h);
+		if (vp.w > 0 && vp.h > 0)
+		{
+			glViewport(vp.x, vp.y, vp.w, vp.h);
 
-		vao.Bind();
-		program.Use();
+			vao.Bind();
+			program.Use();
 
-		glUniform2fv(half_extent_location, 1, glm::value_ptr(World::kHalfExtent));
-		glUniform2f(viewport_px_location, static_cast<float>(vp.w), static_cast<float>(vp.h));
+			glUniform2fv(half_extent_location, 1, glm::value_ptr(World::kHalfExtent));
+			glUniform2f(viewport_px_location, static_cast<float>(vp.w), static_cast<float>(vp.h));
 
-		center_vbo.SubData(0, simulation.ActiveParticles() * sizeof(particles.positions.at(0)), particles.positions.data());
-		glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, simulation.ActiveParticles());
+			center_vbo.SubData(0, simulation.ActiveParticles() * sizeof(particles.positions.at(0)), particles.positions.data());
+			glDrawElementsInstanced(GL_TRIANGLES, 6, GL_UNSIGNED_INT, 0, simulation.ActiveParticles());
+		}
 
 		ImGui::Render();
 		ImGui_ImplOpenGL3_RenderDrawData(ImGui::GetDrawData());
@@ -453,6 +497,15 @@ void Application::Update()
 int main()
 {
 	Log::Init();
-	Application app;
-	return 0;
+	try
+	{
+		Application app;
+		app.Run();
+	}
+	catch (const std::exception& e)
+	{
+		Log::Error("Fatal error: {}", e.what());
+		return EXIT_FAILURE;
+	}
+	return EXIT_SUCCESS;
 }

@@ -11,7 +11,7 @@ out vec4 frag_color;
 
 void main()
 {
-	float radius_px = radius / u_half_extent.y * u_viewport_px.y * 0.5;
+	float radius_px = max(radius / u_half_extent.y * u_viewport_px.y * 0.5, 1.0e-4);
 	float fade = 1.0 / radius_px;
 	float dist = length(tex_coords);
 	float alpha = 1.0 - smoothstep(1.0 - fade, 1.0, dist);
