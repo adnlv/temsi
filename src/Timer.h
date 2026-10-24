@@ -1,6 +1,6 @@
 #pragma once
+#include <cstddef>
 #include <GLFW/glfw3.h>
-#include "Log.h"
 
 class Timer
 {
@@ -28,9 +28,9 @@ public:
 		m_cumulative_frame_count++;
 		if (m_cumulative_dt >= 1.0)
 		{
-			m_fps = m_cumulative_frame_count;
+			m_fps = static_cast<size_t>(static_cast<double>(m_cumulative_frame_count) / m_cumulative_dt + 0.5);
 			m_cumulative_frame_count = 0;
-			m_cumulative_dt -= 1.0;
+			m_cumulative_dt = 0.0;
 		}
 	}
 

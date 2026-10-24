@@ -352,7 +352,7 @@ void Application::Update()
 			ImGui::Begin("Simulation Panel");
 
 			const size_t fps = timer.fps();
-			const float ms_per_frame = fps != 0 ? 1000.0f / fps : 0;
+			const float ms_per_frame = fps != 0 ? 1000.0f / static_cast<float>(fps) : timer.dt() * 1000.0f;
 
 			if (ImGui::CollapsingHeader("Performance", ImGuiTreeNodeFlags_DefaultOpen))
 			{
