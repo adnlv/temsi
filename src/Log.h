@@ -1,4 +1,6 @@
 #pragma once
+#include <memory>
+#include <utility>
 #include <spdlog/spdlog.h>
 #include <spdlog/sinks/stdout_color_sinks.h>
 
@@ -62,11 +64,20 @@ inline std::shared_ptr<spdlog::logger> Log::s_Logger;
 
 inline const std::shared_ptr<spdlog::logger>& Log::SPDLogger() noexcept
 {
+	if (!s_Logger)
+	{
+		Init();
+	}
 	return s_Logger;
 }
 
 inline void Log::Init() noexcept
 {
+	if (s_Logger)
+	{
+		return;
+	}
+
 	// %^   -> Start color region (for level)
 	// [%T] -> Time (HH:MM:SS)
 	// [%n] -> Logger name
@@ -75,6 +86,10 @@ inline void Log::Init() noexcept
 	// %$   -> End color region
 	spdlog::set_pattern("%^[%T] [%n] [%l] %v%$");
 
-	s_Logger = spdlog::stdout_color_mt("Core");
+	s_Logger = spdlog::get("Core");
+	if (!s_Logger)
+	{
+		s_Logger = spdlog::stdout_color_mt("Core");
+	}
 	s_Logger->set_level(spdlog::level::trace);
 }
