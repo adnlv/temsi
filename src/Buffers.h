@@ -1,6 +1,8 @@
 #pragma once
 #include <glad/gl.h>
 
+class Buffer;
+
 class VertexArray
 {
 public:
@@ -18,8 +20,9 @@ public:
 	void Bind() const noexcept;
 	void EnableAttribArray(GLuint index) const noexcept;
 	void DisableAttribArray(GLuint index) const noexcept;
-	void SetAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer) const noexcept;
+	void SetAttribPointer(const Buffer& vbo, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer) const noexcept;
 	void SetAttribDivisor(GLuint index, GLuint divisor) const noexcept;
+	void SetElementBuffer(const Buffer& ebo) const noexcept;
 
 	static void Unbind() noexcept;
 
@@ -80,12 +83,6 @@ inline void VertexArray::DisableAttribArray(GLuint index) const noexcept
 {
 	Bind();
 	glDisableVertexAttribArray(index);
-}
-
-inline void VertexArray::SetAttribPointer(GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer) const noexcept
-{
-	Bind();
-	glVertexAttribPointer(index, size, type, normalized, stride, pointer);
 }
 
 inline void VertexArray::SetAttribDivisor(GLuint index, GLuint divisor) const noexcept
@@ -207,16 +204,35 @@ inline GLenum Buffer::Type() const noexcept
 
 inline void Buffer::Bind() const noexcept
 {
-	glBindBuffer(m_Type, m_Id);
+	if (m_Id != 0 && m_Type != 0)
+	{
+		glBindBuffer(m_Type, m_Id);
+	}
 }
 
 inline void Buffer::SubData(GLintptr offset, GLsizeiptr size, const void* data) const noexcept
 {
-	Bind();
-	glBufferSubData(m_Type, offset, size, data);
+	if (m_Id != 0 && m_Type != 0)
+	{
+		Bind();
+		glBufferSubData(m_Type, offset, size, data);
+	}
 }
 
 inline void Buffer::Unbind(BufferType type) noexcept
 {
 	glBindBuffer(static_cast<GLenum>(type), 0);
+}
+
+inline void VertexArray::SetAttribPointer(const Buffer& vbo, GLuint index, GLint size, GLenum type, GLboolean normalized, GLsizei stride, const void* pointer) const noexcept
+{
+	Bind();
+	vbo.Bind();
+	glVertexAttribPointer(index, size, type, normalized, stride, pointer);
+}
+
+inline void VertexArray::SetElementBuffer(const Buffer& ebo) const noexcept
+{
+	Bind();
+	ebo.Bind();
 }

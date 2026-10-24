@@ -281,7 +281,7 @@ void Application::Update()
 		-1.0f, -1.0f, 0.0f,
 		-1.0f,  1.0f, 0.0f
 	};
-	std::vector<int> indices{
+	std::vector<GLuint> indices{
 		0, 1, 3,
 		1, 2, 3
 	};
@@ -289,27 +289,28 @@ void Application::Update()
 	VertexArray vao;
 
 	Buffer vbo(BufferType::ArrayBuffer, vertices.size() * sizeof(vertices.at(0)), vertices.data(), BufferUsage::StaticDraw);
-	vao.SetAttribPointer(2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(vertices.at(0)), nullptr);
+	vao.SetAttribPointer(vbo, 2, 3, GL_FLOAT, GL_FALSE, 3 * sizeof(vertices.at(0)), nullptr);
 	vao.EnableAttribArray(2);
 
 	const auto& particles = simulation.Particles();
 
 	Buffer radius_vbo(BufferType::ArrayBuffer, particles.num_max_particles * sizeof(particles.radii.at(0)), particles.radii.data(), BufferUsage::StaticDraw);
-	vao.SetAttribPointer(0, 1, GL_FLOAT, GL_FALSE, sizeof(particles.radii.at(0)), nullptr);
+	vao.SetAttribPointer(radius_vbo, 0, 1, GL_FLOAT, GL_FALSE, sizeof(particles.radii.at(0)), nullptr);
 	vao.EnableAttribArray(0);
 	vao.SetAttribDivisor(0, 1);
 
 	Buffer center_vbo(BufferType::ArrayBuffer, particles.num_max_particles * sizeof(particles.positions.at(0)), nullptr, BufferUsage::DynamicDraw);
-	vao.SetAttribPointer(1, 2, GL_FLOAT, GL_FALSE, sizeof(particles.positions.at(0)), nullptr);
+	vao.SetAttribPointer(center_vbo, 1, 2, GL_FLOAT, GL_FALSE, sizeof(particles.positions.at(0)), nullptr);
 	vao.EnableAttribArray(1);
 	vao.SetAttribDivisor(1, 1);
 
 	Buffer color_vbo(BufferType::ArrayBuffer, particles.num_max_particles * sizeof(particles.colors.at(0)), particles.colors.data(), BufferUsage::StaticDraw);
-	vao.SetAttribPointer(3, 3, GL_FLOAT, GL_FALSE, sizeof(particles.colors.at(0)), nullptr);
+	vao.SetAttribPointer(color_vbo, 3, 3, GL_FLOAT, GL_FALSE, sizeof(particles.colors.at(0)), nullptr);
 	vao.EnableAttribArray(3);
 	vao.SetAttribDivisor(3, 1);
 
 	Buffer ebo(BufferType::ElementArrayBuffer, indices.size() * sizeof(indices.at(0)), indices.data(), BufferUsage::StaticDraw);
+	vao.SetElementBuffer(ebo);
 
 	ShaderProgram program = []()
 		{
@@ -431,7 +432,6 @@ void Application::Update()
 		glViewport(vp.x, vp.y, vp.w, vp.h);
 
 		vao.Bind();
-		ebo.Bind();
 		program.Use();
 
 		glUniform2fv(half_extent_location, 1, glm::value_ptr(World::kHalfExtent));
