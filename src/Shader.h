@@ -56,9 +56,15 @@ inline Shader::Shader(ShaderType type, const std::string_view source)
 		GLint logLength = 0;
 		glGetShaderiv(m_Id, GL_INFO_LOG_LENGTH, &logLength);
 
-		std::string infoLog(logLength, '\0');
-		glGetShaderInfoLog(m_Id, logLength, nullptr, infoLog.data());
-		throw std::runtime_error("GL: Shader compilation failed: " + std::string(infoLog));
+		std::string infoLog(logLength > 0 ? logLength : 0, '\0');
+		GLsizei actualLength = 0;
+		if (logLength > 0)
+		{
+			glGetShaderInfoLog(m_Id, logLength, &actualLength, infoLog.data());
+			infoLog.resize(static_cast<size_t>(actualLength));
+		}
+		glDeleteShader(m_Id);
+		throw std::runtime_error("GL: Shader compilation failed: " + infoLog);
 	}
 }
 
@@ -148,6 +154,7 @@ private:
 template<typename ...Args>
 inline ShaderProgram::ShaderProgram(const Args & ...shaders)
 {
+	static_assert(sizeof...(Args) > 0, "GL: ShaderProgram requires at least one Shader object");
 	static_assert((std::is_same_v<Args, Shader> && ...), "GL: ShaderProgram constructor only accepts Shader objects");
 
 	m_Id = glCreateProgram();
@@ -155,6 +162,7 @@ inline ShaderProgram::ShaderProgram(const Args & ...shaders)
 	(glAttachShader(m_Id, shaders.Id()), ...);
 
 	glLinkProgram(m_Id);
+	(glDetachShader(m_Id, shaders.Id()), ...);
 
 	GLint success = 0;
 	glGetProgramiv(m_Id, GL_LINK_STATUS, &success);
@@ -163,12 +171,16 @@ inline ShaderProgram::ShaderProgram(const Args & ...shaders)
 		GLint logLength = 0;
 		glGetProgramiv(m_Id, GL_INFO_LOG_LENGTH, &logLength);
 
-		std::string infoLog(logLength, '\0');
-		glGetProgramInfoLog(m_Id, logLength, nullptr, infoLog.data());
+		std::string infoLog(logLength > 0 ? logLength : 0, '\0');
+		GLsizei actualLength = 0;
+		if (logLength > 0)
+		{
+			glGetProgramInfoLog(m_Id, logLength, &actualLength, infoLog.data());
+			infoLog.resize(static_cast<size_t>(actualLength));
+		}
+		glDeleteProgram(m_Id);
 		throw std::runtime_error("GL: Shader program linking failed: " + infoLog);
 	}
-
-	(glDetachShader(m_Id, shaders.Id()), ...);
 }
 
 inline ShaderProgram::~ShaderProgram()
