@@ -64,7 +64,6 @@ public:
 	void Update(float dt);
 
 	[[nodiscard]] const ParticleBuffer& Particles() const noexcept { return m_particles; }
-	[[nodiscard]] ParticleBuffer& Particles() noexcept { return m_particles; }
 
 	[[nodiscard]] const Temperature& GetTemperature() const noexcept { return m_temperature; }
 	[[nodiscard]] float AvgKineticEnergy() const noexcept { return m_avg_kinetic_energy; }
@@ -86,9 +85,9 @@ private:
 	float m_total_kinetic_energy{ 0.0f };
 	glm::vec2 m_total_momentum{ 0.0f };
 
-	std::vector<glm::vec2> m_pending_impulses;
 	std::vector<int> m_cell_head;
 	std::vector<int> m_particle_next;
 
+	void UpdateMetrics();
 	void ComputeSpeedDistribution();
 };

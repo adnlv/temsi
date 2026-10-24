@@ -24,27 +24,58 @@ ParticleBuffer::ParticleBuffer()
 	{
 		radii[i] = World::kParticleRadius;
 		mass[i] = mass_dis(gen);
-		positions[i] = glm::vec2(pos_x_dis(gen), pos_y_dis(gen));
 		velocities[i] = glm::vec2(vel_dis(gen), vel_dis(gen));
 		colors[i] = glm::vec3(color_dis(gen), color_dis(gen), color_dis(gen));
+
+		// Rejection sampling for non-overlapping initial placement
+		glm::vec2 candidate_pos(0.0f);
+		for (int attempt = 0; attempt < 100; ++attempt)
+		{
+			candidate_pos = glm::vec2(pos_x_dis(gen), pos_y_dis(gen));
+			bool collision = false;
+			for (size_t j = 0; j < i; ++j)
+			{
+				const glm::vec2 diff = candidate_pos - positions[j];
+				const float min_dist = radii[i] + radii[j];
+				if (glm::dot(diff, diff) < min_dist * min_dist)
+				{
+					collision = true;
+					break;
+				}
+			}
+			if (!collision)
+			{
+				break;
+			}
+		}
+		positions[i] = candidate_pos;
 	}
 }
 
 Simulation::Simulation()
 {
-	m_pending_impulses.reserve(m_particles.num_max_particles);
 	m_particle_next.resize(m_particles.num_max_particles);
+	UpdateMetrics();
 }
 
 void Simulation::SetActiveParticles(int count) noexcept
 {
 	m_particles.num_active_particles = std::clamp(count, 0, m_particles.num_max_particles);
+	UpdateMetrics();
 }
 
 void Simulation::Update(float dt)
 {
+	if (dt <= 0.0f)
+	{
+		return;
+	}
+
 	const size_t active_count = static_cast<size_t>(m_particles.num_active_particles);
-	m_pending_impulses.assign(active_count, glm::vec2(0.0f));
+	if (active_count == 0)
+	{
+		return;
+	}
 
 	const glm::vec2 limit = World::kHalfExtent;
 	constexpr float cell_size = 2.0f * World::kParticleRadius;
@@ -68,13 +99,13 @@ void Simulation::Update(float dt)
 	// Helper lambda to check and resolve collision between particles i and j
 	auto check_collision = [&](size_t i, size_t j)
 	{
-		const auto& p1{ m_particles.positions[i] };
-		const auto& v1{ m_particles.velocities[i] };
+		auto& p1{ m_particles.positions[i] };
+		auto& v1{ m_particles.velocities[i] };
 		const auto& r1{ m_particles.radii[i] };
 		const auto& m1{ m_particles.mass[i] };
 
-		const auto& p2{ m_particles.positions[j] };
-		const auto& v2{ m_particles.velocities[j] };
+		auto& p2{ m_particles.positions[j] };
+		auto& v2{ m_particles.velocities[j] };
 		const auto& r2{ m_particles.radii[j] };
 		const auto& m2{ m_particles.mass[j] };
 
@@ -82,20 +113,28 @@ void Simulation::Update(float dt)
 		const auto min_dist = r1 + r2;
 		const auto min_dist_sq = min_dist * min_dist;
 		const auto dist_sq = glm::dot(pos_diff, pos_diff);
-		if (dist_sq > min_dist_sq || dist_sq == 0.0f)
-			return;
-
-		const auto vel_diff = v1 - v2;
-		const auto dot_prod = glm::dot(vel_diff, pos_diff);
-		if (dot_prod >= 0.0f)
+		if (dist_sq > min_dist_sq)
 			return;
 
 		const auto total_mass = m1 + m2;
-		const auto impulse_scalar = dot_prod / dist_sq;
-		const glm::vec2 impulse = impulse_scalar * pos_diff;
+		const float dist = std::sqrt(dist_sq);
+		const glm::vec2 normal = dist > 0.0f ? (pos_diff / dist) : glm::vec2(1.0f, 0.0f);
 
-		m_pending_impulses[i] -= (2.0f * m2 / total_mass) * impulse;
-		m_pending_impulses[j] += (2.0f * m1 / total_mass) * impulse;
+		const float overlap = min_dist - dist;
+		if (overlap > 0.0f)
+		{
+			p1 += normal * (overlap * (m2 / total_mass));
+			p2 -= normal * (overlap * (m1 / total_mass));
+		}
+
+		const auto vel_diff = v1 - v2;
+		const float rel_normal_vel = glm::dot(vel_diff, normal);
+		if (rel_normal_vel >= 0.0f)
+			return;
+
+		const glm::vec2 impulse = rel_normal_vel * normal;
+		v1 -= (2.0f * m2 / total_mass) * impulse;
+		v2 += (2.0f * m1 / total_mass) * impulse;
 	};
 
 	// 3. Traverse grid cells and check collisions O(N)
@@ -144,17 +183,12 @@ void Simulation::Update(float dt)
 		}
 	}
 
-	glm::vec2 current_total_momentum{ 0.0f };
-	float current_total_kinetic_energy = 0.0f;
-
 	for (size_t i = 0; i < active_count; ++i)
 	{
 		auto& p1{ m_particles.positions[i] };
 		auto& v1{ m_particles.velocities[i] };
 		const auto& r1{ m_particles.radii[i] };
-		const auto& m1{ m_particles.mass[i] };
 
-		v1 += m_pending_impulses[i];
 		p1 += v1 * dt;
 
 		if (p1.x - r1 < -limit.x)
@@ -178,7 +212,21 @@ void Simulation::Update(float dt)
 			p1.y = limit.y - r1;
 			v1.y *= -1.0f;
 		}
+	}
 
+	UpdateMetrics();
+}
+
+void Simulation::UpdateMetrics()
+{
+	const size_t active_count = static_cast<size_t>(m_particles.num_active_particles);
+	glm::vec2 current_total_momentum{ 0.0f };
+	float current_total_kinetic_energy = 0.0f;
+
+	for (size_t i = 0; i < active_count; ++i)
+	{
+		const auto& v1{ m_particles.velocities[i] };
+		const auto& m1{ m_particles.mass[i] };
 		const float velocity_sq = glm::dot(v1, v1);
 		current_total_kinetic_energy += m1 * velocity_sq / 2.0f;
 		current_total_momentum += v1 * m1;
@@ -201,6 +249,9 @@ void Simulation::ComputeSpeedDistribution()
 	m_speed_dist.empirical_pdf.fill(0.0f);
 	m_speed_dist.theoretical_pdf.fill(0.0f);
 	m_speed_dist.max_pdf_value = 0.0f;
+	m_speed_dist.peak_speed_theoretical = 0.0f;
+	m_speed_dist.mean_speed_theoretical = 0.0f;
+	m_speed_dist.rms_speed_theoretical = 0.0f;
 
 	if (active_count == 0)
 	{

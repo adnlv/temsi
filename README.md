@@ -15,7 +15,7 @@ Real-time 2D ideal gas simulation in C++17 and OpenGL 4.6: watch macroscopic tem
 
 - **Real-Time Statistical Mechanics:** Simulates up to 2,000 Argon-like particles undergoing elastic collisions and dynamically calculates macroscopic thermodynamic properties.
 - **$O(N)$ Broad-Phase Collision Detection:** Uniform spatial grid implemented via linked-cell index lists (`head`/`next` chain) with half-shell neighbor sweeping, preventing all-pairs checks with zero per-frame dynamic heap allocations.
-- **Order-Independent Collision Resolution:** Uses an impulse-based Jacobi-style solver that computes and accumulates simultaneous collision impulses before applying them, removing sequential resolution bias.
+- **Kinetic Energy and Momentum Conserving Collision Dynamics:** Uses an impulse-based elastic collision solver with mass-weighted positional depenetration, strictly conserving momentum and kinetic energy across collisions.
 - **Instanced GPU Rendering:** Renders thousands of particles in a single OpenGL draw call (`glDrawElementsInstanced`), uploading only dynamic positions per frame while keeping static attributes in immutable VBOs. Antialiased circular particles are shaped smoothly in the fragment shader.
 - **Letterboxed Aspect-Ratio Preservation:** Automatically letterboxes/pillarboxes the viewport to keep the fixed 16:9 physical box geometry undistorted regardless of window resizing or display aspect ratios.
 - **Maxwell–Boltzmann Speed Distribution Verification:** Real-time speed distribution histogram comparing active particle velocities against the theoretical 2D Maxwell–Boltzmann (Rayleigh) distribution curve, validating thermodynamic relaxation into equilibrium.
